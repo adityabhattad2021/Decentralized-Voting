@@ -9,6 +9,7 @@ const POLYSCAN_API_KEY = process.env.POLYSCAN_API_KEY;
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
 	solidity: "0.8.17",
+	defaultNetwork:"hardhat",
 	networks: {
 		hardhat: {
 			chainId: 1337,

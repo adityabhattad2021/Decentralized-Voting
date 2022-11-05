@@ -73,11 +73,17 @@ contract Voting is AutomationCompatibleInterface{
     mapping(uint256=>mapping(address=>Voter)) private addressToVoter;
     // mapping(address => Voter) private addressToVoter;
 
+
+    /**
+     * msg.sender is by default set to the voting orgainser, and has all the rights
+     * The voting contract is by default active, for testing purpose
+     */
     constructor(uint256 firstVoteTimePeriodInSec) {
         votingOrganizer = msg.sender;
         votingRoundNumber.increment();
         votingTimestamp = block.timestamp;
         votingTimePeriodInSeconds = firstVoteTimePeriodInSec;
+        isVotingActive=true;
     }
 
     modifier onlyOrganiser() {

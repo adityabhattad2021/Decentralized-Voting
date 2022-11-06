@@ -30,14 +30,11 @@ module.exports = {
 		deployer: {
 			default:0
 		},
-		notDeployer: {
+		contestant1: {
 			default:1
 		},
-		secondNonDeployer: {
+		contestant2: {
 			default:2
-		},
-		thirdNonDeployer: {
-			default:3
 		}
 	},
 	etherscan: {

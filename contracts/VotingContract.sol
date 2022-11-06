@@ -15,9 +15,10 @@ error Voting__CanditateAlreadyExists(address candidateAddr);
 error Voting__VoterAlreadyExists(address VoterAddr);
 error Voting__VoterWithIdNotExists(uint256 voterId);
 error Voting__VotingClosed();
+error Voting__VotingTimePassed(uint256 timePassed, uint256 votingDuration);
+error Voting__CannotStartNewRoundWithoutBeforePickingWinner();
 
-contract Voting is AutomationCompatibleInterface{
-    
+contract Voting is AutomationCompatibleInterface {
     using Counters for Counters.Counter;
 
     // Events.
@@ -36,14 +37,16 @@ contract Voting is AutomationCompatibleInterface{
         string ipfsURL
     );
     event Voted(uint256 indexed candidateId, address indexed voterAddress);
-    event NewVotingStarted();
+    event NewVotingStarted(uint256 newVotingRoundNumber);
     event WinnerPicked(uint256 indexed winnerId);
 
-    // Voting Record Variables. 
+    // Voting Record Variables.
     bool private isVotingActive;
     uint256 private votingTimePeriodInSeconds;
     uint256 private votingTimestamp;
     Counters.Counter private votingRoundNumber;
+    mapping(uint256 => uint256) private roundNumberToWinnerId;
+    bool private isWinnerPicked;
 
     // Candidate
     Counters.Counter private _candidateCounter;
@@ -57,7 +60,8 @@ contract Voting is AutomationCompatibleInterface{
         string ipfsURL;
     }
     address[] private arrayOfCandidateAddresses;
-    mapping(uint256=>mapping(address=>Candidate)) private addressToCandidate;
+    mapping(uint256 => mapping(address => Candidate))
+        private addressToCandidate;
     // mapping(address => Candidate) private addressToCandidate;
 
     // Voter
@@ -70,9 +74,9 @@ contract Voting is AutomationCompatibleInterface{
         bool alreadyVoted;
         string ipfsURL;
     }
-    mapping(uint256=>mapping(address=>Voter)) private addressToVoter;
-    // mapping(address => Voter) private addressToVoter;
+    mapping(uint256 => mapping(address => Voter)) private addressToVoter;
 
+    // mapping(address => Voter) private addressToVoter;
 
     /**
      * msg.sender is by default set to the voting orgainser, and has all the rights
@@ -83,7 +87,8 @@ contract Voting is AutomationCompatibleInterface{
         votingRoundNumber.increment();
         votingTimestamp = block.timestamp;
         votingTimePeriodInSeconds = firstVoteTimePeriodInSec;
-        isVotingActive=true;
+        isWinnerPicked=false;
+        isVotingActive = true;
     }
 
     modifier onlyOrganiser() {
@@ -109,13 +114,24 @@ contract Voting is AutomationCompatibleInterface{
         string memory _image,
         string memory _ipfsURL
     ) external onlyOrganiser checkVotingActive {
+        if ((block.timestamp - votingTimestamp) > votingTimePeriodInSeconds) {
+            revert Voting__VotingTimePassed(
+                (block.timestamp - votingTimestamp),
+                votingTimePeriodInSeconds
+            );
+        }
         uint256 _votingRoundNum = votingRoundNumber.current();
-        if (addressToCandidate[_votingRoundNum][_candidateAddress].walletAddress == msg.sender) {
+        if (
+            addressToCandidate[_votingRoundNum][_candidateAddress]
+                .walletAddress == _candidateAddress
+        ) {
             revert Voting__CanditateAlreadyExists(_candidateAddress);
         }
         _candidateCounter.increment();
         uint256 _id = _candidateCounter.current();
-        Candidate storage candidate = addressToCandidate[_votingRoundNum][_candidateAddress];
+        Candidate storage candidate = addressToCandidate[_votingRoundNum][
+            _candidateAddress
+        ];
         candidate.id = _id;
         candidate.name = _name;
         candidate.image = _image;
@@ -138,8 +154,17 @@ contract Voting is AutomationCompatibleInterface{
         string memory _name,
         string memory _ipfsURL
     ) external checkVotingActive {
+        if ((block.timestamp - votingTimestamp) > votingTimePeriodInSeconds) {
+            revert Voting__VotingTimePassed(
+                (block.timestamp - votingTimestamp),
+                votingTimePeriodInSeconds
+            );
+        }
         uint256 _votingRoundNum = votingRoundNumber.current();
-        if (addressToVoter[_votingRoundNum][_voterAddress].walletAddress == _voterAddress) {
+        if (
+            addressToVoter[_votingRoundNum][_voterAddress].walletAddress ==
+            _voterAddress
+        ) {
             revert Voting__VoterAlreadyExists(_voterAddress);
         }
         _voterCounter.increment();
@@ -163,6 +188,12 @@ contract Voting is AutomationCompatibleInterface{
     }
 
     function giveVote(uint256 candidateId) external checkVotingActive {
+        if ((block.timestamp - votingTimestamp) > votingTimePeriodInSeconds) {
+            revert Voting__VotingTimePassed(
+                (block.timestamp - votingTimestamp),
+                votingTimePeriodInSeconds
+            );
+        }
         uint256 _votingRoundNum = votingRoundNumber.current();
         uint256 voterArryLen = arrayofVoterAddresses.length;
         bool voterExists = false;
@@ -184,10 +215,13 @@ contract Voting is AutomationCompatibleInterface{
         bool voted = false;
         for (uint y = 0; y < candidateArryLength; ) {
             if (
-                addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[y]].id ==
-                candidateId
+                addressToCandidate[_votingRoundNum][
+                    arrayOfCandidateAddresses[y]
+                ].id == candidateId
             ) {
-                addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[y]].voteCount += 1;
+                addressToCandidate[_votingRoundNum][
+                    arrayOfCandidateAddresses[y]
+                ].voteCount += 1;
                 voted = true;
             }
             unchecked {
@@ -209,17 +243,25 @@ contract Voting is AutomationCompatibleInterface{
         uint indexOfCandidateWithMaxVotes;
         for (uint256 x = 0; x < lenOfCandidateArry; ) {
             if (
-                addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[x]].voteCount > max
+                addressToCandidate[_votingRoundNum][
+                    arrayOfCandidateAddresses[x]
+                ].voteCount > max
             ) {
-                max = addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[x]]
-                    .voteCount;
+                max = addressToCandidate[_votingRoundNum][
+                    arrayOfCandidateAddresses[x]
+                ].voteCount;
                 indexOfCandidateWithMaxVotes = x;
             }
             unchecked {
                 x++;
             }
         }
+        roundNumberToWinnerId[_votingRoundNum] = addressToCandidate[
+            _votingRoundNum
+        ][arrayOfCandidateAddresses[indexOfCandidateWithMaxVotes]].id;
+
         isVotingActive = false;
+        isWinnerPicked = true;
         emit WinnerPicked(
             addressToCandidate[_votingRoundNum][
                 arrayOfCandidateAddresses[indexOfCandidateWithMaxVotes]
@@ -228,19 +270,24 @@ contract Voting is AutomationCompatibleInterface{
         votingRoundNumber.increment();
     }
 
-    function startNewVoting(bool toStart, uint256 _votingTimePeriod)
+    function startNewVoting(uint256 _votingTimePeriod)
         external
         onlyOrganiser
     {
-        isVotingActive = toStart;
+        if(!isWinnerPicked){
+            revert Voting__CannotStartNewRoundWithoutBeforePickingWinner();
+        }
+        isVotingActive = true;
+        isWinnerPicked = false;
         votingTimePeriodInSeconds = _votingTimePeriod;
         votingTimestamp = block.timestamp;
         arrayOfCandidateAddresses = new address[](0);
         arrayofVoterAddresses = new address[](0);
-        emit NewVotingStarted();
+        uint newVotingRoundNumber = votingRoundNumber.current();
+        emit NewVotingStarted(newVotingRoundNumber);
     }
 
-    // Chainlink Automation Functions. 
+    // Chainlink Automation Functions.
     function checkUpkeep(
         bytes memory /* checkData */
     )
@@ -281,15 +328,14 @@ contract Voting is AutomationCompatibleInterface{
         return arrayOfCandidateAddresses.length;
     }
 
-    function getCandidateByAddress(uint256 _votingRoundNum,address _candidateAddress)
-        public
-        view
-        returns (Candidate memory)
-    {
+    function getCandidateByAddress(
+        uint256 _votingRoundNum,
+        address _candidateAddress
+    ) public view returns (Candidate memory) {
         return addressToCandidate[_votingRoundNum][_candidateAddress];
     }
 
-    function getCandidateById(uint256 _votingRoundNum,uint256 candidateId)
+    function getCandidateById(uint256 _votingRoundNum, uint256 candidateId)
         public
         view
         returns (Candidate memory)
@@ -297,10 +343,14 @@ contract Voting is AutomationCompatibleInterface{
         uint256 lenOfCandidateArry = arrayOfCandidateAddresses.length;
         for (uint z = 0; z < lenOfCandidateArry; ) {
             if (
-                addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[z]].id ==
-                candidateId
+                addressToCandidate[_votingRoundNum][
+                    arrayOfCandidateAddresses[z]
+                ].id == candidateId
             ) {
-                return addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[z]];
+                return
+                    addressToCandidate[_votingRoundNum][
+                        arrayOfCandidateAddresses[z]
+                    ];
             }
             unchecked {
                 z++;
@@ -309,11 +359,19 @@ contract Voting is AutomationCompatibleInterface{
         revert Voting__CandidateWithIdNotExists(candidateId);
     }
 
-    function getVoterById(uint256 _votingRoundNum,uint256 voterId) public view returns (Voter memory) {
+    function getVoterById(uint256 _votingRoundNum, uint256 voterId)
+        public
+        view
+        returns (Voter memory)
+    {
         uint256 lengthOfVoterArry = arrayofVoterAddresses.length;
         for (uint a = 0; a < lengthOfVoterArry; ) {
-            if (addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]].id == voterId) {
-                return addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]];
+            if (
+                addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]].id ==
+                voterId
+            ) {
+                return
+                    addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]];
             }
             unchecked {
                 a++;
@@ -322,7 +380,7 @@ contract Voting is AutomationCompatibleInterface{
         revert Voting__VoterWithIdNotExists(voterId);
     }
 
-    function getVoterByAddress(uint256 _votingRoundNum,address voterAddr)
+    function getVoterByAddress(uint256 _votingRoundNum, address voterAddr)
         public
         view
         returns (Voter memory)
@@ -337,13 +395,28 @@ contract Voting is AutomationCompatibleInterface{
     function getVoterLength() public view returns (uint256) {
         return arrayofVoterAddresses.length;
     }
-    
-    function getIsVotingActive() public view returns(bool){
+
+    function getIsVotingActive() public view returns (bool) {
         return isVotingActive;
     }
 
-    function getCurrentVotingRoundNumber() public view returns(uint256){
+    function getVotingCurrentVotingDuration() public view returns (uint256) {
+        return votingTimePeriodInSeconds;
+    }
+
+    function getCurrentVotingRoundNumber() public view returns (uint256) {
         return votingRoundNumber.current();
     }
 
+    function getRoundWinnerById(uint256 roundNumber)
+        public
+        view
+        returns (uint256)
+    {
+        return roundNumberToWinnerId[roundNumber];
+    }
+
+    function getIsWinnerPickedStatus() public view returns(bool){
+        return isWinnerPicked;
+    }
 }

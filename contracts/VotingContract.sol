@@ -18,6 +18,13 @@ error Voting__VotingClosed();
 error Voting__VotingTimePassed(uint256 timePassed, uint256 votingDuration);
 error Voting__CannotStartNewRoundWithoutBeforePickingWinner();
 
+
+/**
+ * @title A Voting Smart Contract
+ * @author Aditya Bhattad
+ * @notice This is a fully secure voting smart contract
+ * @dev This makes use of chainlink automation to automate the voting process
+ */
 contract Voting is AutomationCompatibleInterface {
     using Counters for Counters.Counter;
 
@@ -25,7 +32,7 @@ contract Voting is AutomationCompatibleInterface {
     event CandidateCreated(
         uint256 indexed candidateId,
         address indexed candidateAddress,
-        string candidateName,
+        string indexed candidateName,
         string candidateIpfsURL,
         string candidateImage
     );
@@ -37,7 +44,7 @@ contract Voting is AutomationCompatibleInterface {
         string ipfsURL
     );
     event Voted(uint256 indexed candidateId, address indexed voterAddress);
-    event NewVotingStarted(uint256 newVotingRoundNumber);
+    event NewVotingStarted(uint256 indexed newVotingRoundNumber);
     event WinnerPicked(uint256 indexed winnerId);
 
     // Voting Record Variables.
@@ -48,7 +55,7 @@ contract Voting is AutomationCompatibleInterface {
     mapping(uint256 => uint256) private roundNumberToWinnerId;
     bool private isWinnerPicked;
 
-    // Candidate
+    // Candidate Variables.
     Counters.Counter private _candidateCounter;
     address public votingOrganizer;
     struct Candidate {
@@ -64,7 +71,7 @@ contract Voting is AutomationCompatibleInterface {
         private addressToCandidate;
     // mapping(address => Candidate) private addressToCandidate;
 
-    // Voter
+    // Voter Variables.
     Counters.Counter private _voterCounter;
     address[] private arrayofVoterAddresses;
     struct Voter {
@@ -76,12 +83,10 @@ contract Voting is AutomationCompatibleInterface {
     }
     mapping(uint256 => mapping(address => Voter)) private addressToVoter;
 
+    // Old and unefficient way of storing candiates and voters.
     // mapping(address => Voter) private addressToVoter;
 
-    /**
-     * msg.sender is by default set to the voting orgainser, and has all the rights
-     * The voting contract is by default active, for testing purpose
-     */
+
     constructor(uint256 firstVoteTimePeriodInSec) {
         votingOrganizer = msg.sender;
         votingRoundNumber.increment();
@@ -91,6 +96,7 @@ contract Voting is AutomationCompatibleInterface {
         isVotingActive = true;
     }
 
+    
     modifier onlyOrganiser() {
         if (msg.sender != votingOrganizer) {
             revert Voting__OnlyOrganiserCanCallThisFunction(
@@ -108,6 +114,15 @@ contract Voting is AutomationCompatibleInterface {
         _;
     }
 
+    /**
+     * @notice This function is used to create a new candidate
+     * @param _name The name of the candidate
+     * @param _image The image of the candidate
+     * @param _candidateAddress The wallet address of the candidate
+     * @param _ipfsURL The ipfs url of the candidate
+     * @dev This function is only callable by the voting organizer
+     * @dev This function emits the CandidateCreated event if executed successfully
+     */
     function addCandidate(
         address _candidateAddress,
         string memory _name,
@@ -149,6 +164,16 @@ contract Voting is AutomationCompatibleInterface {
         );
     }
 
+    /**
+     * @notice This function is used to create a new voter
+     * @param _name The name of the voter
+     * @param _voterAddress The wallet address of the voter
+     * @param _ipfsURL The ipfs url of the voter
+     * @dev This function can be called by anyone
+     * @dev This function can be called only when the voting is active
+     * @dev This function can be called only when the voting time period has not passed
+     * @dev This function emits a VoterCreated event if executed successfully
+     */
     function addVoter(
         address _voterAddress,
         string memory _name,
@@ -187,6 +212,14 @@ contract Voting is AutomationCompatibleInterface {
         );
     }
 
+    /**
+     * @notice This function is used to vote for a candidate
+     * @param candidateId The id of the desired candidate
+     * @dev This function can be called by anyone
+     * @dev This function can be called only when the voting is active
+     * @dev This function can be called only when the voting time period has not passed
+     * @dev This function emits a Voted event if executed successfully
+     */
     function giveVote(uint256 candidateId) external checkVotingActive {
         if ((block.timestamp - votingTimestamp) > votingTimePeriodInSeconds) {
             revert Voting__VotingTimePassed(
@@ -236,6 +269,10 @@ contract Voting is AutomationCompatibleInterface {
         emit Voted(candidateId, msg.sender);
     }
 
+    /**
+     * @dev This function is to be called internally by performUpKeep.
+     * @dev This function emits a WinnerPicked with winner candidate Id event if executed successfully
+     */
     function pickWinner() internal checkVotingActive {
         uint256 _votingRoundNum = votingRoundNumber.current();
         uint lenOfCandidateArry = arrayOfCandidateAddresses.length;
@@ -270,6 +307,13 @@ contract Voting is AutomationCompatibleInterface {
         votingRoundNumber.increment();
     }
 
+    /**
+     * @notice This function can be only called by the organiser of the voting
+     * @notice This function can be called only when the winner of the last round has been picked.
+     * @param _votingTimePeriod The time period for which the voting will be active
+     * @dev This function resets the array of old candidates and voters.
+     * @dev This function emits a NewVotingStarted event if executed successfully
+     */
     function startNewVoting(uint256 _votingTimePeriod)
         external
         onlyOrganiser
@@ -320,7 +364,7 @@ contract Voting is AutomationCompatibleInterface {
     }
 
     // getter functions
-    function getAllCandidiates() public view returns (address[] memory) {
+    function getAllCandidates() public view returns (address[] memory) {
         return arrayOfCandidateAddresses;
     }
 
@@ -418,5 +462,9 @@ contract Voting is AutomationCompatibleInterface {
 
     function getIsWinnerPickedStatus() public view returns(bool){
         return isWinnerPicked;
+    }
+
+    function getLastVotingTimeStamp() public view returns(uint256){
+        return votingTimestamp;
     }
 }

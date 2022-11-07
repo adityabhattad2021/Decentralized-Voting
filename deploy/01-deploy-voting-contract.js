@@ -15,7 +15,7 @@ module.exports = async function ({ getNamedAccounts, deployments }) {
     const chainId = network.config.chainId;
     console.log(`------ChainId is ${chainId}------------`);
 
-    const startingVotingDuration = 500; // 500 secs.
+    const startingVotingDuration = 60000; // 500 secs.
 
     const args = [
         startingVotingDuration

@@ -5,7 +5,7 @@ const { developmentChains } = require("../../helper-hardhat-config");
 !developmentChains.includes(network.name)
 	? describe.skip
 	: describe("Voting Contract Unit Tests", function () {
-			let votingContract, deployer, votingInitialInterval;
+			let votingContract, deployer;
 			const chainId = network.config.chainId;
 
 			beforeEach(async function () {
@@ -191,13 +191,13 @@ const { developmentChains } = require("../../helper-hardhat-config");
 
 					const contestant = (await getNamedAccounts()).contestant1;
 
-					const txContestent = await votingContract.addCandidate(
+					const txAddContestent = await votingContract.addCandidate(
 						contestant,
 						"Name",
 						"Image",
 						"ipfsURL"
 					);
-					await txContestent.wait(1);
+					await txAddContestent.wait(1);
 
 					const txVoter = await votingContract.addVoter(
 						registeredVoter.address,
@@ -205,6 +205,24 @@ const { developmentChains } = require("../../helper-hardhat-config");
 						"ipfsURL"
 					);
 					await txVoter.wait(1);
+				});
+
+				it("Throws error if tried to give vote after winner is picked", async function () {
+					network.provider.send("evm_increaseTime", [600]);
+					network.provider.send("evm_mine", []);
+
+					const tx = await votingContract.performUpkeep([]);
+					await tx.wait(1);
+
+					const contractConnectedToVoter =
+						await votingContract.connect(registeredVoter);
+
+					await expect(
+						contractConnectedToVoter.giveVote("1")
+					).to.be.revertedWithCustomError(
+						votingContract,
+						"Voting__VotingClosed"
+					);
 				});
 
 				it("Throws an error if tried to voter after voting period is over.", async function () {
@@ -276,12 +294,6 @@ const { developmentChains } = require("../../helper-hardhat-config");
 				});
 			});
 
-			// add 2 candidates 7 voters
-			// 1->3
-			// 2->4
-			// pass voting time
-			// mock as keepers
-			// check event
 			describe("Pick Winner", async function () {
 				let correctWinnerCandidateId;
 				beforeEach(async function () {
@@ -503,7 +515,7 @@ const { developmentChains } = require("../../helper-hardhat-config");
 						network.provider.send("evm_mine", []);
 
 						const tx = await votingContract.performUpkeep([]);
-						await tx.wait(1)
+						await tx.wait(1);
 
 						const resetTransection =
 							await votingContract.startNewVoting(
@@ -518,6 +530,220 @@ const { developmentChains } = require("../../helper-hardhat-config");
 
 						assert.equal(newVotingStatus, true);
 					});
+					it("Changes is winner picked back to false.", async function () {
+						const newIsWinnerPickedStatus =
+							await votingContract.getIsWinnerPickedStatus();
+						assert.equal(newIsWinnerPickedStatus, false);
+					});
+					it("Sets new is voting time peroid correctly.", async function () {
+						const newVotingTimePeriod =
+							await votingContract.getVotingCurrentVotingDuration();
+						assert.equal(
+							newVotingTimePeriod,
+							votingTimePeriodInSec
+						);
+					});
+
+					it("Sets the voting time stamp to current time.", async function () {
+						const newVotingTimeStamp =
+							await votingContract.getLastVotingTimeStamp();
+
+						const blockNumAfter =
+							await ethers.provider.getBlockNumber();
+						const blockAfter = await ethers.provider.getBlock(
+							blockNumAfter
+						);
+						const timestampAfter = blockAfter.timestamp;
+						assert.equal(
+							parseInt(newVotingTimeStamp),
+							timestampAfter
+						);
+					});
+
+					it("Clears the existing array of candidates as well as voters.", async function () {
+						const allVotersLength =
+							await votingContract.getVoterLength();
+						const allCandidatesLength =
+							await votingContract.getCandidateLength();
+
+						assert.equal(parseInt(allVotersLength), 0);
+						assert.equal(parseInt(allCandidatesLength), 0);
+					});
+				});
+			});
+
+			describe("Getter functions", function () {
+				let votingRoundNumber, allAccounts;
+				beforeEach(async function () {
+					const { contestant1, contestant2 } =
+						await getNamedAccounts();
+
+					const tx1 = await votingContract.addCandidate(
+						contestant1,
+						"candidate1",
+						"c1Image",
+						"c1URL"
+					);
+					await tx1.wait(1);
+
+					const tx2 = await votingContract.addCandidate(
+						contestant2,
+						"candidate2",
+						"c2Image",
+						"c2URL"
+					);
+					await tx2.wait(1);
+
+					const candidate1Id = 1;
+					const candidate2Id = 2;
+					const votesForFirstCandidate = 3;
+					const votesForSecondCandidate = 4;
+					allAccounts = await ethers.getSigners();
+					const firstStartIndex = 3;
+
+					for (
+						let i = firstStartIndex;
+						i <= firstStartIndex + votesForFirstCandidate;
+						i++
+					) {
+						const txRegistration = await votingContract.addVoter(
+							allAccounts[i].address,
+							`voter${i - 2}`,
+							`ipfsURLofVoter${i}`
+						);
+						await txRegistration.wait(1);
+						contractConnectedToVoter = votingContract.connect(
+							allAccounts[i]
+						);
+						const tx = await contractConnectedToVoter.giveVote(
+							candidate1Id
+						);
+						await tx.wait(1);
+					}
+					for (
+						let i = firstStartIndex + votesForFirstCandidate + 1;
+						i <=
+						firstStartIndex +
+							votesForFirstCandidate +
+							1 +
+							votesForSecondCandidate;
+						i++
+					) {
+						const txRegistration = await votingContract.addVoter(
+							allAccounts[i].address,
+							`voter${i - 2}`,
+							`ipfsURLofVoter${i}`
+						);
+						await txRegistration.wait(1);
+						contractConnectedToVoter = votingContract.connect(
+							allAccounts[i]
+						);
+						const tx = await contractConnectedToVoter.giveVote(
+							candidate2Id
+						);
+						await tx.wait(1);
+					}
+
+					votingRoundNumber =
+						await votingContract.getCurrentVotingRoundNumber();
+				});
+
+				it("Throws error if candidate for entered candidate id does not exist.", async function () {
+					const someNonExistantCnadidateId = 5;
+
+					await expect(
+						votingContract.getCandidateById(
+							votingRoundNumber,
+							someNonExistantCnadidateId
+						)
+					)
+						.to.be.revertedWithCustomError(
+							votingContract,
+							"Voting__CandidateWithIdNotExists"
+						)
+						.withArgs(someNonExistantCnadidateId);
+				});
+
+				it("Throws error if the voter for entered voter id does not exist.", async function () {
+					const someNonExistantVoterId = 52;
+
+					await expect(
+						votingContract.getVoterById(
+							votingRoundNumber,
+							someNonExistantVoterId
+						)
+					)
+						.to.be.revertedWithCustomError(
+							votingContract,
+							"Voting__VoterWithIdNotExists"
+						)
+						.withArgs(someNonExistantVoterId);
+				});
+
+				it("If candidate for given Id exists returns it correctly.", async function () {
+					const candidate1Id = 1;
+					const canditate1Name = "candidate1";
+					const candidateNameFromContract = (
+						await votingContract.getCandidateById(
+							votingRoundNumber,
+							candidate1Id
+						)
+					).name;
+
+					assert.equal(canditate1Name, candidateNameFromContract);
+				});
+
+				it("If voter for given Id exists returns it correclty.", async function () {
+					// As the voter with Id 1 will be voter 3 (because account 0=>Organiser,2=>contestent1,3=>contestant2)
+					const voterNumber = 1;
+					const voterName = "voter1";
+
+					const voterFromContractName = (
+						await votingContract.getVoterById(
+							votingRoundNumber,
+							voterNumber
+						)
+					).name;
+					assert.equal(voterFromContractName, voterName);
+				});
+
+				it("Correctly returns candidate if provided candidate address.", async function () {
+					const { contestant1: contestantAddress } =
+						await getNamedAccounts();
+					const contestantAddrFromContract = (
+						await votingContract.getCandidateByAddress(
+							votingRoundNumber,
+							contestantAddress
+						)
+					).walletAddress;
+
+					assert.equal(contestantAddress, contestantAddrFromContract);
+				});
+
+				it("Correctly returns voter if provided voter address.", async function () {
+					// Accounts 3 onwards are for voters
+					const someVoterAddress = allAccounts[5].address;
+
+					const voterAddrFromContract = (
+						await votingContract.getVoterByAddress(
+							votingRoundNumber,
+							someVoterAddress
+						)
+					).walletAddress;
+
+					assert.equal(someVoterAddress, voterAddrFromContract);
+				});
+
+				it("Correclty returns all candidate array.", async function () {
+					const correctLength = 2;
+					const allCandidates =
+						await votingContract.getAllCandidates();
+					assert.equal(allCandidates.length, correctLength);
+				});
+				it("Correclty returns all Voter array.", async function () {
+					const correctLength = 7;
+					const allVoters = await votingContract.getAllVoters();
+					console.log(allVoters.length, correctLength);
 				});
 			});
 	  });

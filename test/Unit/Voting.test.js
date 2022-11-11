@@ -294,7 +294,7 @@ const { developmentChains } = require("../../helper-hardhat-config");
 				});
 			});
 
-			describe("Pick Winner", async function () {
+			describe("Pick Winner", function () {
 				let correctWinnerCandidateId;
 				beforeEach(async function () {
 					const { contestant1, contestant2 } =
@@ -747,3 +747,5 @@ const { developmentChains } = require("../../helper-hardhat-config");
 				});
 			});
 	  });
+
+	  

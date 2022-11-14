@@ -2,7 +2,7 @@ const { ethers, network, getNamedAccounts, deployments } = require("hardhat");
 
 async function mockVoting() {
 	
-	deployer = (await getNamedAccounts()).deployer;
+	const deployer = (await getNamedAccounts()).deployer;
 	const votingContract = await ethers.getContract("Voting", deployer);
 	const { contestant1, contestant2 } = await getNamedAccounts();
 	console.log("--------------------Adding Candidates--------------------");
@@ -10,7 +10,8 @@ async function mockVoting() {
 		contestant1,
 		"candidate1",
 		"c1Image",
-		"c1URL"
+		"c1URL",
+		{gasLimit:3e7}
 	);
 	await tx1.wait(1);
 
@@ -44,7 +45,7 @@ async function mockVoting() {
 		);
 		await txRegistration.wait(1);
 		contractConnectedToVoter = votingContract.connect(allAccounts[i]);
-		const tx = await contractConnectedToVoter.giveVote(candidate1Id);
+		const tx = await contractConnectedToVoter.giveVote(candidate1Id,{gasLimit: 3e7});
 		await tx.wait(1);
         console.log(`Voter ${i} voting....`);
 	}
@@ -61,7 +62,7 @@ async function mockVoting() {
 		);
 		await txRegistration.wait(1);
 		contractConnectedToVoter = votingContract.connect(allAccounts[i]);
-		const tx = await contractConnectedToVoter.giveVote(candidate2Id);
+		const tx = await contractConnectedToVoter.giveVote(candidate2Id,{gasLimit: 3e7});
 		await tx.wait(1);
         console.log(`Voter ${i} voting....`);
 

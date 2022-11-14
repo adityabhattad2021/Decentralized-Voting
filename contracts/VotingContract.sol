@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
 
@@ -17,7 +18,6 @@ error Voting__VoterWithIdNotExists(uint256 voterId);
 error Voting__VotingClosed();
 error Voting__VotingTimePassed(uint256 timePassed, uint256 votingDuration);
 error Voting__CannotStartNewRoundWithoutBeforePickingWinner();
-
 
 /**
  * @title A Voting Smart Contract
@@ -86,17 +86,15 @@ contract Voting is AutomationCompatibleInterface {
     // Old and unefficient way of storing candiates and voters.
     // mapping(address => Voter) private addressToVoter;
 
-
     constructor(uint256 firstVoteTimePeriodInSec) {
         votingOrganizer = msg.sender;
         votingRoundNumber.increment();
         votingTimestamp = block.timestamp;
         votingTimePeriodInSeconds = firstVoteTimePeriodInSec;
-        isWinnerPicked=false;
+        isWinnerPicked = false;
         isVotingActive = true;
     }
 
-    
     modifier onlyOrganiser() {
         if (msg.sender != votingOrganizer) {
             revert Voting__OnlyOrganiserCanCallThisFunction(
@@ -314,11 +312,8 @@ contract Voting is AutomationCompatibleInterface {
      * @dev This function resets the array of old candidates and voters.
      * @dev This function emits a NewVotingStarted event if executed successfully
      */
-    function startNewVoting(uint256 _votingTimePeriod)
-        external
-        onlyOrganiser
-    {
-        if(!isWinnerPicked){
+    function startNewVoting(uint256 _votingTimePeriod) external onlyOrganiser {
+        if (!isWinnerPicked) {
             revert Voting__CannotStartNewRoundWithoutBeforePickingWinner();
         }
         isVotingActive = true;
@@ -327,6 +322,8 @@ contract Voting is AutomationCompatibleInterface {
         votingTimestamp = block.timestamp;
         arrayOfCandidateAddresses = new address[](0);
         arrayofVoterAddresses = new address[](0);
+        _candidateCounter.reset();
+        _voterCounter.reset();
         uint newVotingRoundNumber = votingRoundNumber.current();
         emit NewVotingStarted(newVotingRoundNumber);
     }
@@ -460,11 +457,11 @@ contract Voting is AutomationCompatibleInterface {
         return roundNumberToWinnerId[roundNumber];
     }
 
-    function getIsWinnerPickedStatus() public view returns(bool){
+    function getIsWinnerPickedStatus() public view returns (bool) {
         return isWinnerPicked;
     }
 
-    function getLastVotingTimeStamp() public view returns(uint256){
+    function getLastVotingTimeStamp() public view returns (uint256) {
         return votingTimestamp;
     }
 }

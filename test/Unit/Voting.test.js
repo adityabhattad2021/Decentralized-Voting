@@ -680,6 +680,35 @@ const { developmentChains } = require("../../helper-hardhat-config");
 						.withArgs(someNonExistantVoterId);
 				});
 
+				it("Throws error if the voter with entered address does not exixts", async function () {
+					const nonExistentVoterAddress = allAccounts[1].address;
+					await expect(
+						votingContract.getVoterByAddress(
+							votingRoundNumber,
+							nonExistentVoterAddress
+						)
+					)
+						.to.be.revertedWithCustomError(
+							votingContract,
+							"Voting__VoterNotExists"
+						)
+						.withArgs(nonExistentVoterAddress);
+				});
+				
+				it("Throws error if the voter with entered address does not exixts", async function () {
+					const nonExistentVoterAddress = allAccounts[1].address;
+					await expect(
+						votingContract.hasVoterAreadyVoted(
+							nonExistentVoterAddress
+						)
+					)
+						.to.be.revertedWithCustomError(
+							votingContract,
+							"Voting__VoterNotExists"
+						)
+						.withArgs(nonExistentVoterAddress);
+				});
+
 				it("If candidate for given Id exists returns it correctly.", async function () {
 					const candidate1Id = 1;
 					const canditate1Name = "candidate1";
@@ -745,7 +774,24 @@ const { developmentChains } = require("../../helper-hardhat-config");
 					const allVoters = await votingContract.getAllVoters();
 					console.log(allVoters.length, correctLength);
 				});
+
+				it("Correctly return voter registration status",async function(){
+					const someVoterAddress = allAccounts[5].address;
+					const isVoterRegistered = await votingContract.isVoterRegistered(
+						votingRoundNumber,
+						someVoterAddress
+					)
+					assert.equal(isVoterRegistered,1)
+				})
+
+				it("Correctly returns voter voting status",async function(){
+					const someVoterAddress  =await allAccounts[5].address;
+					const hasVoterVoted  = await votingContract.hasVoterAreadyVoted(
+						someVoterAddress
+					);
+					console.log(hasVoterVoted);
+					assert.equal(hasVoterVoted,1)
+				})
+
 			});
 	  });
-
-	  

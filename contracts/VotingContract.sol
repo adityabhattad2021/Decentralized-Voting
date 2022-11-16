@@ -14,6 +14,7 @@ error Voting__CandidateWithIdNotExists(uint256 candidateId);
 error Voting__UpKeepNotNeeded(bool isActive, bool timePassed);
 error Voting__CanditateAlreadyExists(address candidateAddr);
 error Voting__VoterAlreadyExists(address VoterAddr);
+error Voting__VoterNotExists(address VoterAddr);
 error Voting__VoterWithIdNotExists(uint256 voterId);
 error Voting__VotingClosed();
 error Voting__VotingTimePassed(uint256 timePassed, uint256 votingDuration);
@@ -426,7 +427,23 @@ contract Voting is AutomationCompatibleInterface {
         view
         returns (Voter memory)
     {
+        if(addressToVoter[_votingRoundNum][voterAddr].id == 0){
+            revert Voting__VoterNotExists(voterAddr);
+        }
         return addressToVoter[_votingRoundNum][voterAddr];
+    }
+
+    function isVoterRegistered(uint256 _votingRoundNum, address voterAddr)
+        public
+        view
+        returns (bool)
+    {
+        return addressToVoter[_votingRoundNum][voterAddr].id != 0;
+    }
+
+    function hasVoterAreadyVoted(address voterAddr) public view returns(bool){
+        uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        return addressToVoter[_votingRoundNum][voterAddr].alreadyVoted;
     }
 
     function getAllVoters() public view returns (address[] memory) {

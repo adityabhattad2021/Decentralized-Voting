@@ -4,7 +4,7 @@ async function main() {
 	const voting = await ethers.getContract("Voting");
 
     
-	network.provider.send("evm_increaseTime", [60000]);
+	network.provider.send("evm_increaseTime", [6000000]);
 	network.provider.send("evm_mine", []);
 
 	const checkData = ethers.utils.keccak256(ethers.utils.toUtf8Bytes(""));

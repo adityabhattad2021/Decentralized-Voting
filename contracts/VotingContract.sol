@@ -427,7 +427,7 @@ contract Voting is AutomationCompatibleInterface {
         view
         returns (Voter memory)
     {
-        if(addressToVoter[_votingRoundNum][voterAddr].id == 0){
+        if (addressToVoter[_votingRoundNum][voterAddr].id == 0) {
             revert Voting__VoterNotExists(voterAddr);
         }
         return addressToVoter[_votingRoundNum][voterAddr];
@@ -441,8 +441,11 @@ contract Voting is AutomationCompatibleInterface {
         return addressToVoter[_votingRoundNum][voterAddr].id != 0;
     }
 
-    function hasVoterAreadyVoted(address voterAddr) public view returns(bool){
+    function hasVoterAreadyVoted(address voterAddr) public view returns (bool) {
         uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        if (addressToVoter[_votingRoundNum][voterAddr].id == 0) {
+            revert Voting__VoterNotExists(voterAddr);
+        }
         return addressToVoter[_votingRoundNum][voterAddr].alreadyVoted;
     }
 

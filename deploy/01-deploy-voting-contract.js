@@ -39,12 +39,13 @@ module.exports = async function ({ getNamedAccounts, deployments }) {
         log("--------------------------------------------------------");
     }
 
-    log("---------------------Writing ABI------------------------");
-    fs.writeFileSync("../nextjs-frontend/constants.js",`
-        export const contractAddress = "${voting.address}";
-        export const organiserAddress = "${deployer}";
-    `)
-    log("-----------ABI Successfully Updated---------------------");
+    // log("---------------------Writing ABI------------------------");
+
+    // fs.writeFileSync("../nextjs-frontend/constants.js",`
+    //     export const contractAddress = "${voting.address}";
+    //     export const organiserAddress = "${deployer}";
+    // `)
+    // log("-----------ABI Successfully Updated---------------------");
     
 }
 

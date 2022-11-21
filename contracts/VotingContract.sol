@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 import "hardhat/console.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
+import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
 // Error
 error Voting__OnlyOrganiserCanCallThisFunction(
@@ -28,6 +29,7 @@ error Voting__CannotStartNewRoundWithoutBeforePickingWinner();
  */
 contract Voting is AutomationCompatibleInterface {
     using Counters for Counters.Counter;
+    using EnumerableSet for EnumerableSet.AddressSet;
 
     // Events.
     event CandidateCreated(
@@ -74,7 +76,7 @@ contract Voting is AutomationCompatibleInterface {
 
     // Voter Variables.
     Counters.Counter private _voterCounter;
-    address[] private arrayofVoterAddresses;
+    // address[] private arrayofVoterAddresses;
     struct Voter {
         uint256 id;
         string name;
@@ -83,6 +85,7 @@ contract Voting is AutomationCompatibleInterface {
         string ipfsURL;
     }
     mapping(uint256 => mapping(address => Voter)) private addressToVoter;
+    mapping(uint256 => EnumerableSet.AddressSet) private arrayofVoterAddresses;
 
     // Old and unefficient way of storing candiates and voters.
     // mapping(address => Voter) private addressToVoter;
@@ -200,7 +203,8 @@ contract Voting is AutomationCompatibleInterface {
         voter.ipfsURL = _ipfsURL;
         voter.alreadyVoted = false;
 
-        arrayofVoterAddresses.push(_voterAddress);
+        // arrayofVoterAddresses.push(_voterAddress);
+        arrayofVoterAddresses[_votingRoundNum].add(_voterAddress);
 
         emit VoterCreated(
             voter.id,
@@ -227,17 +231,17 @@ contract Voting is AutomationCompatibleInterface {
             );
         }
         uint256 _votingRoundNum = votingRoundNumber.current();
-        uint256 voterArryLen = arrayofVoterAddresses.length;
-        bool voterExists = false;
-        for (uint x = 0; x < voterArryLen; ) {
-            if (arrayofVoterAddresses[x] == msg.sender) {
-                voterExists = true;
-            }
-            unchecked {
-                x++;
-            }
-        }
-        require(voterExists, "You are not registered to vote");
+        // uint256 voterArryLen = arrayofVoterAddresses.length;
+        // bool voterExists = false;
+        // for (uint x = 0; x < voterArryLen; ) {
+        //     if (arrayofVoterAddresses[x] == msg.sender) {
+        //         voterExists = true;
+        //     }
+        //     unchecked {
+        //         x++;
+        //     }
+        // }
+        require(arrayofVoterAddresses[_votingRoundNum].contains(msg.sender), "You are not registered to vote");
         require(
             !addressToVoter[_votingRoundNum][msg.sender].alreadyVoted,
             "The msg sender has already voted"
@@ -322,7 +326,7 @@ contract Voting is AutomationCompatibleInterface {
         votingTimePeriodInSeconds = _votingTimePeriod;
         votingTimestamp = block.timestamp;
         arrayOfCandidateAddresses = new address[](0);
-        arrayofVoterAddresses = new address[](0);
+        // arrayofVoterAddresses = new address[](0);
         _candidateCounter.reset();
         _voterCounter.reset();
         uint newVotingRoundNumber = votingRoundNumber.current();
@@ -406,14 +410,14 @@ contract Voting is AutomationCompatibleInterface {
         view
         returns (Voter memory)
     {
-        uint256 lengthOfVoterArry = arrayofVoterAddresses.length;
+        uint256 lengthOfVoterArry = arrayofVoterAddresses[_votingRoundNum].length();
         for (uint a = 0; a < lengthOfVoterArry; ) {
             if (
-                addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]].id ==
+                addressToVoter[_votingRoundNum][arrayofVoterAddresses[_votingRoundNum].at(a)].id ==
                 voterId
             ) {
                 return
-                    addressToVoter[_votingRoundNum][arrayofVoterAddresses[a]];
+                    addressToVoter[_votingRoundNum][arrayofVoterAddresses[_votingRoundNum].at(a)];
             }
             unchecked {
                 a++;
@@ -450,11 +454,13 @@ contract Voting is AutomationCompatibleInterface {
     }
 
     function getAllVoters() public view returns (address[] memory) {
-        return arrayofVoterAddresses;
+        uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        return arrayofVoterAddresses[_votingRoundNum].values();
     }
 
     function getVoterLength() public view returns (uint256) {
-        return arrayofVoterAddresses.length;
+        uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        return arrayofVoterAddresses[_votingRoundNum].length();
     }
 
     function getIsVotingActive() public view returns (bool) {

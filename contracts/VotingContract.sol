@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/utils/Counters.sol";
 import "@chainlink/contracts/src/v0.8/AutomationCompatible.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 
-// Error
+// Errors
 error Voting__OnlyOrganiserCanCallThisFunction(
     address caller,
     address organiser
@@ -51,6 +51,7 @@ contract Voting is AutomationCompatibleInterface {
     event WinnerPicked(uint256 indexed winnerId);
 
     // Voting Record Variables.
+    address public votingOrganizer;
     bool private isVotingActive;
     uint256 private votingTimePeriodInSeconds;
     uint256 private votingTimestamp;
@@ -60,7 +61,6 @@ contract Voting is AutomationCompatibleInterface {
 
     // Candidate Variables.
     Counters.Counter private _candidateCounter;
-    address public votingOrganizer;
     struct Candidate {
         uint256 id;
         string name;
@@ -69,14 +69,14 @@ contract Voting is AutomationCompatibleInterface {
         uint256 voteCount;
         string ipfsURL;
     }
-    address[] private arrayOfCandidateAddresses;
-    mapping(uint256 => mapping(address => Candidate))
-        private addressToCandidate;
+    mapping(uint256 => mapping(address => Candidate)) private addressToCandidate;
+    mapping(uint256=>EnumerableSet.AddressSet) private arrayOfCandidateAddresses;
+
+    // Old and unefficient way of storing candiates and voters.
     // mapping(address => Candidate) private addressToCandidate;
 
     // Voter Variables.
     Counters.Counter private _voterCounter;
-    // address[] private arrayofVoterAddresses;
     struct Voter {
         uint256 id;
         string name;
@@ -155,7 +155,7 @@ contract Voting is AutomationCompatibleInterface {
         candidate.walletAddress = _candidateAddress;
         candidate.ipfsURL = _ipfsURL;
 
-        arrayOfCandidateAddresses.push(_candidateAddress);
+        arrayOfCandidateAddresses[_votingRoundNum].add(_candidateAddress);
 
         emit CandidateCreated(
             candidate.id,
@@ -203,7 +203,6 @@ contract Voting is AutomationCompatibleInterface {
         voter.ipfsURL = _ipfsURL;
         voter.alreadyVoted = false;
 
-        // arrayofVoterAddresses.push(_voterAddress);
         arrayofVoterAddresses[_votingRoundNum].add(_voterAddress);
 
         emit VoterCreated(
@@ -231,32 +230,22 @@ contract Voting is AutomationCompatibleInterface {
             );
         }
         uint256 _votingRoundNum = votingRoundNumber.current();
-        // uint256 voterArryLen = arrayofVoterAddresses.length;
-        // bool voterExists = false;
-        // for (uint x = 0; x < voterArryLen; ) {
-        //     if (arrayofVoterAddresses[x] == msg.sender) {
-        //         voterExists = true;
-        //     }
-        //     unchecked {
-        //         x++;
-        //     }
-        // }
         require(arrayofVoterAddresses[_votingRoundNum].contains(msg.sender), "You are not registered to vote");
         require(
             !addressToVoter[_votingRoundNum][msg.sender].alreadyVoted,
             "The msg sender has already voted"
         );
 
-        uint candidateArryLength = arrayOfCandidateAddresses.length;
+        uint candidateArryLength = arrayOfCandidateAddresses[_votingRoundNum].length();
         bool voted = false;
         for (uint y = 0; y < candidateArryLength; ) {
             if (
                 addressToCandidate[_votingRoundNum][
-                    arrayOfCandidateAddresses[y]
+                    arrayOfCandidateAddresses[_votingRoundNum].at(y)
                 ].id == candidateId
             ) {
                 addressToCandidate[_votingRoundNum][
-                    arrayOfCandidateAddresses[y]
+                    arrayOfCandidateAddresses[_votingRoundNum].at(y)
                 ].voteCount += 1;
                 voted = true;
             }
@@ -278,17 +267,17 @@ contract Voting is AutomationCompatibleInterface {
      */
     function pickWinner() internal checkVotingActive {
         uint256 _votingRoundNum = votingRoundNumber.current();
-        uint lenOfCandidateArry = arrayOfCandidateAddresses.length;
+        uint lenOfCandidateArry = arrayOfCandidateAddresses[_votingRoundNum].length();
         uint max = 0;
         uint indexOfCandidateWithMaxVotes;
         for (uint256 x = 0; x < lenOfCandidateArry; ) {
             if (
                 addressToCandidate[_votingRoundNum][
-                    arrayOfCandidateAddresses[x]
+                    arrayOfCandidateAddresses[_votingRoundNum].at(x)
                 ].voteCount > max
             ) {
                 max = addressToCandidate[_votingRoundNum][
-                    arrayOfCandidateAddresses[x]
+                    arrayOfCandidateAddresses[_votingRoundNum].at(x)
                 ].voteCount;
                 indexOfCandidateWithMaxVotes = x;
             }
@@ -296,15 +285,13 @@ contract Voting is AutomationCompatibleInterface {
                 x++;
             }
         }
-        roundNumberToWinnerId[_votingRoundNum] = addressToCandidate[
-            _votingRoundNum
-        ][arrayOfCandidateAddresses[indexOfCandidateWithMaxVotes]].id;
+        roundNumberToWinnerId[_votingRoundNum] = addressToCandidate[_votingRoundNum][arrayOfCandidateAddresses[_votingRoundNum].at(indexOfCandidateWithMaxVotes)].id;
 
         isVotingActive = false;
         isWinnerPicked = true;
         emit WinnerPicked(
             addressToCandidate[_votingRoundNum][
-                arrayOfCandidateAddresses[indexOfCandidateWithMaxVotes]
+                arrayOfCandidateAddresses[_votingRoundNum].at(indexOfCandidateWithMaxVotes)
             ].id
         );
         votingRoundNumber.increment();
@@ -325,7 +312,9 @@ contract Voting is AutomationCompatibleInterface {
         isWinnerPicked = false;
         votingTimePeriodInSeconds = _votingTimePeriod;
         votingTimestamp = block.timestamp;
-        arrayOfCandidateAddresses = new address[](0);
+
+        // This are no more needed as the voting round number changes array points at new location and the data in the old array remains accessible.
+        // arrayOfCandidateAddresses = new address[](0);
         // arrayofVoterAddresses = new address[](0);
         _candidateCounter.reset();
         _voterCounter.reset();
@@ -367,11 +356,13 @@ contract Voting is AutomationCompatibleInterface {
 
     // getter functions
     function getAllCandidates() public view returns (address[] memory) {
-        return arrayOfCandidateAddresses;
+        uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        return arrayOfCandidateAddresses[_votingRoundNum].values();
     }
 
     function getCandidateLength() public view returns (uint256) {
-        return arrayOfCandidateAddresses.length;
+        uint256 _votingRoundNum = getCurrentVotingRoundNumber();
+        return arrayOfCandidateAddresses[_votingRoundNum].length();
     }
 
     function getCandidateByAddress(
@@ -386,16 +377,16 @@ contract Voting is AutomationCompatibleInterface {
         view
         returns (Candidate memory)
     {
-        uint256 lenOfCandidateArry = arrayOfCandidateAddresses.length;
+        uint256 lenOfCandidateArry = arrayOfCandidateAddresses[_votingRoundNum].length();
         for (uint z = 0; z < lenOfCandidateArry; ) {
             if (
                 addressToCandidate[_votingRoundNum][
-                    arrayOfCandidateAddresses[z]
+                    arrayOfCandidateAddresses[_votingRoundNum].at(z)
                 ].id == candidateId
             ) {
                 return
                     addressToCandidate[_votingRoundNum][
-                        arrayOfCandidateAddresses[z]
+                        arrayOfCandidateAddresses[_votingRoundNum].at(z)
                     ];
             }
             unchecked {
